@@ -1,0 +1,1 @@
+gcc chat_room.c fd_recv.c fd_send.c  messages.c client_handler.c -o chat_room -w
