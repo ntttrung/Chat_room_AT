@@ -169,8 +169,8 @@ bool is_name_available(char *username){
 int main(int argc, char *argv[]){
   int    listen_fd   = 0;
   int    conn_fd     = 0;
-  int    worker_fd   = 0;
-  int    worker_socket   = 0;
+  int    client_fd   = 0;
+  int    client_socket   = 0;
   int    option      = 0;
   pid_t  child       = 0;
   char  *port        = DEFAULT_PORT;
@@ -211,40 +211,40 @@ int main(int argc, char *argv[]){
   printf("[INFO] Server is started successfully on port %s\n", port);
 
   // Create UNIX domain socket
-  worker_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+  client_socket = socket(AF_UNIX, SOCK_STREAM, 0);
   struct sockaddr_un addr;
   memset(&addr, 0, sizeof(addr));
   addr.sun_family = AF_UNIX;
-  strncpy(addr.sun_path, "server-worker-socket", sizeof(addr.sun_path)-1);
+  strncpy(addr.sun_path, "server-client-socket", sizeof(addr.sun_path)-1);
 
   // Bind to address
-  unlink("server-worker-socket");
-  if(bind(worker_socket, (struct sockaddr*)&addr, sizeof(addr)) == -1){
+  unlink("server-client-socket");
+  if(bind(client_socket, (struct sockaddr*)&addr, sizeof(addr)) == -1){
     printf("[ERROR in %s near line %d]\n", __FILE__, __LINE__);
     perror("[ERROR] bind() failed");
     exit(EXIT_FAILURE);
   }
 
   // Allow incoming connections
-  if(listen(worker_socket, 1) == -1){
+  if(listen(client_socket, 1) == -1){
     printf("[ERROR in %s near line %d]\n", __FILE__, __LINE__);
     perror("[ERROR] Listening failed");
     exit(EXIT_FAILURE);
   }
 
-  // Start worker
+  // Start client
   if (!(child = fork())) {
-    // Worker process here
-    close(worker_socket);
+    // client process here
+    close(client_socket);
     handle_clients();
 
     exit(EXIT_FAILURE);
   }
-  printf("[INFO] Worker process started with PID %d\n", child);
+  printf("[INFO] client process started with PID %d\n", child);
 
-  // Accept connection from worker
-  worker_fd = accept(worker_socket, 0, 0);
-  if (worker_fd == -1){
+  // Accept connection from client
+  client_fd = accept(client_socket, 0, 0);
+  if (client_fd == -1){
     printf("[ERROR in %s near line %d]\n", __FILE__, __LINE__);
     perror("[ERROR] accept() failed");
   }
@@ -310,10 +310,10 @@ int main(int argc, char *argv[]){
     //sprintf(client->name, "%d", uid++);
     strcpy(client->name, username);
     strcpy(client->ip_address, address);
-    printf("[INFO] Sending fd to worker: %d\n", conn_fd);
-    ancil_send_fd(worker_fd, conn_fd);
+    printf("[INFO] Sending fd to client: %d\n", conn_fd);
+    ancil_send_fd(client_fd, conn_fd);
   }
 
-  close(worker_fd);
+  close(client_fd);
   close(listen_fd);
 }
