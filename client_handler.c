@@ -84,38 +84,38 @@ void strip_newline(char *s){
 void handle_clients(){
   char buffer_out[BUFFER_SIZE] = {0};
   char buffer_in[BUFFER_SIZE]  = {0};
-  int worker_fd;
+  int client_fd;
   struct sockaddr_un server;
   int  read_len = 0;
   int  result;
   fd_set readset;
 
-  worker_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (worker_fd < 0) {
+  client_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (client_fd < 0) {
       printf("[ERROR in %s near line %d]\n", __FILE__, __LINE__);
       perror("[ERROR] socket failed");
       exit(EXIT_FAILURE);
   }
   server.sun_family = AF_UNIX;
-  strcpy(server.sun_path, "server-worker-socket");
+  strcpy(server.sun_path, "server-client-socket");
 
-  // Ensue that server accepts connections before worker tries to connect
+  // Ensue that server accepts connections before client tries to connect
   usleep(10);
-  if (connect(worker_fd, (struct sockaddr *) &server, sizeof(struct sockaddr_un)) < 0) {
+  if (connect(client_fd, (struct sockaddr *) &server, sizeof(struct sockaddr_un)) < 0) {
       printf("[ERROR in %s near line %d]\n", __FILE__, __LINE__);
       perror("[ERROR] connect() failed");
-      close(worker_fd);
+      close(client_fd);
       exit(EXIT_FAILURE);
   }
 
-  printf("[INFO] Worker connected to server:  FD => %d\n", worker_fd);
+  printf("[INFO] client connected to server:  FD => %d\n", client_fd);
 
   // Receive input from client
   while(1)
   {
     // Construct set of fds
     FD_ZERO(&readset);
-    FD_SET(worker_fd, &readset);
+    FD_SET(client_fd, &readset);
     for(int i=0 ; i<MAX_CLIENTS ; i++){
       if(clients[i].active){
         FD_SET(clients[i].conn_fd, &readset);
@@ -129,19 +129,19 @@ void handle_clients(){
     } while (result == -1 && errno == EINTR);
 
     if (result > 0) {
-      if (FD_ISSET(worker_fd, &readset)) {
-         printf("[DEBUG] Worker fd triggered\n");
+      if (FD_ISSET(client_fd, &readset)) {
+         printf("[DEBUG] client fd triggered\n");
         // The socket_fd has data available to be read
         client_t *client = get_pending_client();
         if(client == NULL){
           printf("[WARNING] No pending client\n");
         }
         else {
-          ancil_recv_fd(worker_fd, &result);
+          ancil_recv_fd(client_fd, &result);
 
           if(result < 0) {
             // This means the other side closed the socket
-            close(worker_fd);
+            close(client_fd);
             exit(EXIT_SUCCESS);
           }
           else {
@@ -150,6 +150,11 @@ void handle_clients(){
             client->active = true;
 
             write(client->conn_fd, "<server> Welcome!\n", strlen("<server> Welcome!\n"));
+            write(client->conn_fd, CMD_QUIT"\tQuit chatroom\n", strlen(CMD_QUIT"\tQuit chatroom\n"));
+            write(client->conn_fd, CMD_NAME"\t<name> Change nickname\n", strlen(CMD_NAME"\t<name> Change nickname\n"));
+            write(client->conn_fd, CMD_MSG"\t<user> <message> Send message to user\n", strlen(CMD_MSG"\t<user> <message> Send message to user\n"));
+            write(client->conn_fd, CMD_LIST"\tList active clients\n", strlen(CMD_LIST"\tList active clients\n"));
+            write(client->conn_fd, CMD_HELP"\tShow help\n", strlen(CMD_HELP"\tShow help\n"));
             // Alert for joining of client
             printf("[INFO] Client connected    => ");
             printf("{ NAME => '%s', IP_ADDRESS => %s, FD => %d }\n",
@@ -205,11 +210,16 @@ void handle_clients(){
             }else if(strcmp(command, CMD_NAME) == 0){
               param = strtok(NULL, " ");
               if(param){
-                char *old_name = strdup(clients[i].name);
-                strcpy(clients[i].name, param);
-                sprintf(buffer_out, "[INFO] Renamed %s to %s\n", old_name, clients[i].name);
-                free(old_name);
-                send_message_all(buffer_out);
+                if(!is_name_available(param)){
+                  send_message_self("[ERROR] Username is taken\n", clients[i].conn_fd);
+                }
+                else{
+                  char *old_name = strdup(clients[i].name);
+                  strcpy(clients[i].name, param);
+                  sprintf(buffer_out, "[INFO] Renamed %s to %s\n", old_name, clients[i].name);
+                  free(old_name);
+                  send_message_all(buffer_out);
+                }
               }else{
                 send_message_self("[ERROR] Username not provided\n", clients[i].conn_fd);
               }

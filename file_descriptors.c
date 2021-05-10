@@ -8,7 +8,7 @@
 #include "shared.h"
 
 // Send file-descriptor
-int send_fd_to_worker(int worker_fd, int conn_fd, client_t client){
+int send_fd_to_client(int client_fd, int conn_fd, client_t client){
   struct msghdr hdr;
   struct iovec data;
 
@@ -35,7 +35,7 @@ int send_fd_to_worker(int worker_fd, int conn_fd, client_t client){
 
   *(int*)CMSG_DATA(cmsg) = conn_fd;
 
-  int n = sendmsg(worker_fd, &hdr, 0);
+  int n = sendmsg(client_fd, &hdr, 0);
 
   if(n == -1)
     perror("[ERROR] sendmsg() failed");
@@ -44,7 +44,7 @@ int send_fd_to_worker(int worker_fd, int conn_fd, client_t client){
 }
 
 // Receive file-descriptor
-int recv_fd_from_server(int worker_fd){
+int recv_fd_from_server(int client_fd){
 	int n;
 	int fd;
 	char buf[1];
@@ -65,7 +65,7 @@ int recv_fd_from_server(int worker_fd){
 	msg.msg_control = (caddr_t)cms;
 	msg.msg_controllen = sizeof cms;
 
-	if((n=recvmsg(worker_fd, &msg, 0)) < 0)
+	if((n=recvmsg(client_fd, &msg, 0)) < 0)
 		return -1;
 	if(n == 0){
     perror("[ERROR] recvdmsg() failed: Unexpected EOF");
